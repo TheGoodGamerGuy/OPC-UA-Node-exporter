@@ -46,6 +46,20 @@ class NodeCSVExporter:
         self.datatype_cache: Dict[ua.NodeId, str] = {}
         self._nodes_filtered_by_datatype: int = 0
 
+        # Process datatype_filter: Treat None and case-insensitive "none" string as no filter
+        if datatype_filter and isinstance(datatype_filter, str):
+            processed_filter = datatype_filter.lower().strip() # Lowercase and remove surrounding whitespace
+            if processed_filter == "none":
+                self.datatype_filter = None # Treat string "none" (case-insensitive) as disabling the filter
+                logger.debug("DataType filter explicitly disabled via 'none' string.")
+            else:
+                self.datatype_filter = processed_filter # Use the actual lowercase string as the filter
+                logger.debug(f"DataType filter set to: '{self.datatype_filter}'")
+        else:
+            # Handles cases where datatype_filter is None, empty string, or not a string
+            self.datatype_filter = None
+            logger.debug("DataType filter disabled (input was None, empty, or non-string).")
+
     async def _browse_nodes_recursive(self, start_node: Node):
         """ Browsing logic remains the same """
         await self._browse_queue.put(start_node)
@@ -470,7 +484,7 @@ async def main():
     HARDCODED_SERVER_URL = "opc.tcp://100.94.111.58:4841" # Example: Replace with your server URL
     HARDCODED_OUTPUT_FILE = "nodes_output_new.csv"     # Example: Replace with your desired output path
     HARDCODED_NAMESPACE_FILTER = 2                 # Example: Set to an integer (e.g., 2) or None to disable
-    HARDCODED_DATATYPE_FILTER = "None"                # Example: Set to a string (e.g., "Float", "Int32") or None to disable (case-insensitive)
+    HARDCODED_DATATYPE_FILTER = None                # Example: Set to a string (e.g., "Float", "Int32") or None to disable (case-insensitive)
     HARDCODED_BATCH_SIZE = 1000                       # Default batch size
     HARDCODED_LOGLEVEL = 'INFO'                       # Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     # --- END OF HARDCODED VALUES ---
