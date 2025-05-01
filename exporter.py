@@ -21,8 +21,8 @@ class NodeCSVExporter:
     Exports OPC UA nodes using optimized batch operations, streaming CSV,
     optional DataType filtering, and a two-stage read process for potentially
     better performance with highly selective data type filters.
+    Includes a 'CustomName' column pre-filled with the BrowseName.
     """
-    # __init__ remains the same as it receives values from the main function
     def __init__(self, server_url: str, output_file: str, namespace_filter: Optional[int] = None, datatype_filter: Optional[str] = None, batch_size: int = 1000):
         if not server_url:
             raise ValueError("Server URL cannot be empty.")
@@ -32,8 +32,6 @@ class NodeCSVExporter:
         self.server_url: str = server_url
         self.output_file: str = output_file
         self.namespace_filter: Optional[int] = namespace_filter
-        # Ensure datatype filter is lowercase if provided
-        self.datatype_filter: Optional[str] = datatype_filter.lower() if datatype_filter else None
         self.batch_size: int = batch_size
         self.processed_node_ids: Set[ua.NodeId] = set()
         self.nodes_to_export_ids: List[ua.NodeId] = []
@@ -45,6 +43,20 @@ class NodeCSVExporter:
         self._nodes_with_read_errors: int = 0 # Counts nodes with errors in *either* read stage
         self.datatype_cache: Dict[ua.NodeId, str] = {}
         self._nodes_filtered_by_datatype: int = 0
+
+        # Process datatype_filter: Treat None and case-insensitive "none" string as no filter
+        if datatype_filter and isinstance(datatype_filter, str):
+            processed_filter = datatype_filter.lower().strip() # Lowercase and remove surrounding whitespace
+            if processed_filter == "none":
+                self.datatype_filter = None # Treat string "none" (case-insensitive) as disabling the filter
+                logger.debug("DataType filter explicitly disabled via 'none' string.")
+            else:
+                self.datatype_filter = processed_filter # Use the actual lowercase string as the filter
+                logger.debug(f"DataType filter set to: '{self.datatype_filter}'")
+        else:
+            # Handles cases where datatype_filter is None, empty string, or not a string
+            self.datatype_filter = None
+            logger.debug("DataType filter disabled (input was None, empty, or non-string).")
 
 
     async def _browse_nodes_recursive(self, start_node: Node):
@@ -259,7 +271,7 @@ class NodeCSVExporter:
     async def export_to_csv(self):
         """
         Filters nodes by namespace and optionally DataType, then exports details
-        to a CSV file using a two-stage read process.
+        to a CSV file using a two-stage read process. Includes a 'CustomName' column.
         """
         if not self.processed_node_ids:
             logger.warning("No nodes were found during browsing. Skipping export.")
@@ -298,8 +310,8 @@ class NodeCSVExporter:
 
         export_start_time = time.time()
         last_log_time = time.time()
-        # Define the columns for the CSV file
-        expected_columns = ["NodeId", "BrowseName", "DataType", "DisplayName", "Description"]
+        # Define the columns for the CSV file - ADDED "CustomName"
+        expected_columns = ["NodeId", "BrowseName", "CustomName", "DataType", "DisplayName", "Description"]
 
         try:
             # Open the CSV file for writing
@@ -373,6 +385,10 @@ class NodeCSVExporter:
                             final_node_data["BrowseName"] = other_attrs.get("BrowseName", "N/A")
                             final_node_data["DisplayName"] = other_attrs.get("DisplayName", "N/A")
                             final_node_data["Description"] = other_attrs.get("Description", "N/A")
+
+                            # --- ADDED: Prefill CustomName with BrowseName ---
+                            final_node_data["CustomName"] = final_node_data["BrowseName"]
+                            # --- END ADDED ---
 
                             # Check if Stage 2 introduced an error
                             stage2_error = other_attrs.get("_read_error", False)
@@ -471,7 +487,7 @@ async def main():
     HARDCODED_SERVER_URL = "opc.tcp://100.94.111.58:4841" # Example: Replace with your server URL
     HARDCODED_OUTPUT_FILE = "nodes_output_new.csv"     # Example: Replace with your desired output path
     HARDCODED_NAMESPACE_FILTER = 2                 # Example: Set to an integer (e.g., 2) or None to disable
-    HARDCODED_DATATYPE_FILTER = None                # Example: Set to a string (e.g., "Float", "Int32") or None to disable (case-insensitive)
+    HARDCODED_DATATYPE_FILTER = None                # Example: Set to a string (e.g., "Float", "Int32") or None/"none" to disable (case-insensitive)
     HARDCODED_BATCH_SIZE = 1000                       # Default batch size
     HARDCODED_LOGLEVEL = 'INFO'                       # Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     # --- END OF HARDCODED VALUES ---
@@ -490,7 +506,11 @@ async def main():
     logger.info(f"Server URL: {HARDCODED_SERVER_URL}")
     logger.info(f"Output File: {HARDCODED_OUTPUT_FILE}")
     logger.info(f"Namespace Filter: {'All' if HARDCODED_NAMESPACE_FILTER is None else HARDCODED_NAMESPACE_FILTER}")
-    logger.info(f"DataType Filter: {'All' if HARDCODED_DATATYPE_FILTER is None else HARDCODED_DATATYPE_FILTER}")
+    # Updated logging for DataType Filter to reflect the "none" string handling
+    dt_filter_log_msg = 'All'
+    if isinstance(HARDCODED_DATATYPE_FILTER, str) and HARDCODED_DATATYPE_FILTER.lower().strip() != 'none':
+        dt_filter_log_msg = HARDCODED_DATATYPE_FILTER
+    logger.info(f"DataType Filter: {dt_filter_log_msg}")
     logger.info(f"Batch Size: {HARDCODED_BATCH_SIZE}")
 
     try:
@@ -512,4 +532,3 @@ async def main():
 if __name__ == "__main__":
     # Run the main asynchronous function
     asyncio.run(main())
-

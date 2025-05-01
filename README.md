@@ -47,6 +47,7 @@ The output CSV file (`HARDCODED_OUTPUT_FILE`) will contain the following columns
 
 * `NodeId`: The full NodeId string (e.g., "ns=2;i=1234").
 * `BrowseName`: The BrowseName of the node.
+* `CustomName`: Prefilled with the BrowseName of the node, is used for the telegraf configuration generator.
 * `DataType`: The resolved BrowseName of the node's data type (e.g., "Float", "String", "Int32") or "N/A" if it couldn't be read/resolved.
 * `DisplayName`: The DisplayName of the node.
 * `Description`: The Description of the node (if available).
